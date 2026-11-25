@@ -185,12 +185,12 @@ with tab2:
     st.subheader("Sebaran Spasial Titik Panas Terbaru (Sampel 2023–2026)")
     df_peta_plot = df_peta.copy()
     df_peta_plot["Status Lahan"] = df_peta_plot["is_lahan_gambut"].map({1: "Lahan Gambut", 0: "Non-Gambut"})
-    fig_map = px.scatter_mapbox(
+    fig_map = px.scatter_map(
         df_peta_plot, lat="latitude", lon="longitude", color="Status Lahan",
         color_discrete_map={"Lahan Gambut": ALERT_RED, "Non-Gambut": ACCENT_GREEN},
         zoom=3.8, center={"lat": -2.2, "lon": 117.5}, height=420, opacity=0.65
     )
-    fig_map.update_layout(mapbox_style="carto-positron", margin=dict(l=0, r=0, t=10, b=0))
+    fig_map.update_layout(map_style="carto-positron", margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(fig_map, use_container_width=True)
 
 # ==============================================================================
