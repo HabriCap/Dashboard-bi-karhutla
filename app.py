@@ -55,22 +55,23 @@ def load_all_data():
     gambut = pd.read_parquet(os.path.join(DATA_DIR, "mart_gambut_bulanan.parquet"))
     top_khg = pd.read_parquet(os.path.join(DATA_DIR, "mart_top_khg.parquet"))
     peta = pd.read_parquet(os.path.join(DATA_DIR, "mart_peta_hotspot_sample.parquet"))
+    frp_sample = pd.read_parquet(os.path.join(DATA_DIR, "mart_frp_sample.parquet"))
     ispu = pd.read_parquet(os.path.join(DATA_DIR, "mart_ispu_kesehatan.parquet"))
     pred = pd.read_parquet(os.path.join(DATA_DIR, "mart_prediksi_karhutla.parquet"))
     fi = pd.read_parquet(os.path.join(DATA_DIR, "mart_feature_importance.parquet"))
     
     prov["periode"] = pd.to_datetime(prov["tahun"].astype(str) + "-" + prov["bulan"].astype(str).str.zfill(2) + "-01")
     gambut["periode"] = pd.to_datetime(gambut["tahun"].astype(str) + "-" + gambut["bulan"].astype(str).str.zfill(2) + "-01")
-    return prov, gambut, top_khg, peta, ispu, pred, fi
+    return prov, gambut, top_khg, peta, frp_sample, ispu, pred, fi
 
 
 def show_visual_guide(title, terms):
-    with st.expander(f"Cara membaca: {title}"):
-        st.table(pd.DataFrame(terms, columns=["Istilah / bagian", "Arti sederhana"]))
+    with st.expander(f"Panduan membaca: {title}"):
+        st.table(pd.DataFrame(terms, columns=["Istilah / elemen", "Penjelasan"]))
 
 
 try:
-    df_prov, df_gambut, df_top_khg, df_peta, df_ispu, df_pred, df_fi = load_all_data()
+    df_prov, df_gambut, df_top_khg, df_peta, df_frp_sample, df_ispu, df_pred, df_fi = load_all_data()
 except Exception as e:
     st.error(f"Gagal memuat data dari folder '{DATA_DIR}/'. Pastikan semua file .parquet sudah di-push ke GitHub. Detail: {e}")
     st.stop()
@@ -78,7 +79,7 @@ except Exception as e:
 # ==============================================================================
 # SIDEBAR FILTER GLOBAL
 # ==============================================================================
-st.sidebar.title("Pilih Data")
+st.sidebar.title("Filter Data")
 tahun_list = sorted(df_prov["tahun"].unique())
 tahun_range = st.sidebar.select_slider(
     "Rentang tahun",
@@ -90,7 +91,7 @@ prov_list = ["Semua Provinsi"] + sorted(df_prov["provinsi_id"].dropna().unique()
 selected_prov = st.sidebar.selectbox("Provinsi", prov_list)
 
 enso_list = ["Semua Fase"] + sorted(df_prov["status_enso"].dropna().unique().tolist())
-selected_enso = st.sidebar.selectbox("Kondisi ENSO (suhu laut Pasifik)", enso_list)
+selected_enso = st.sidebar.selectbox("Fase ENSO (suhu laut Pasifik)", enso_list)
 
 # Terapkan Filter ke Dataset Provinsi
 mask_prov = (df_prov["tahun"] >= tahun_range[0]) & (df_prov["tahun"] <= tahun_range[1])
@@ -103,14 +104,14 @@ df_prov_filt = df_prov[mask_prov].copy()
 # ==============================================================================
 # HEADER UTAMA
 # ==============================================================================
-st.title("Dashboard Titik Panas, Gambut, Udara, dan Risiko Kebakaran")
-st.caption("Gunakan pilihan tahun, provinsi, dan kondisi iklim di sebelah kiri untuk melihat data yang sesuai.")
+st.title("Dashboard Karhutla: Hotspot, Gambut, Kualitas Udara, dan Risiko")
+st.caption("Atur rentang tahun, provinsi, dan fase ENSO melalui filter di sebelah kiri untuk menyesuaikan analisis.")
 
 tab1, tab2, tab3, tab4 = st.tabs([
-    "1. Cuaca & Titik Panas",
-    "2. Kebakaran di Lahan Gambut",
-    "3. Udara & Kesehatan",
-    "4. Perkiraan Risiko"
+    "1. Hotspot & Iklim",
+    "2. Hotspot di Lahan Gambut",
+    "3. Kualitas Udara & Kesehatan",
+    "4. Prediksi Risiko"
 ])
 
 # ==============================================================================
@@ -118,22 +119,22 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==============================================================================
 with tab1:
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Jumlah titik panas terdeteksi", f"{int(df_prov_filt['hotspots_snpp'].sum()):,}")
-    c2.metric("Titik panas dengan keyakinan tinggi", f"{int(df_prov_filt['high_confidence_snpp'].sum()):,}")
-    c3.metric("Total kekuatan panas terukur", f"{df_prov_filt['frp_sum_snpp'].sum():,.0f} MW")
-    c4.metric("Rata-rata perubahan suhu Pasifik", f"{df_prov_filt['oni_anom'].mean():.2f} °C")
+    c1.metric("Total hotspot terdeteksi (SNPP)", f"{int(df_prov_filt['hotspots_snpp'].sum()):,}")
+    c2.metric("Hotspot dengan keyakinan tinggi (confidence)", f"{int(df_prov_filt['high_confidence_snpp'].sum()):,}")
+    c3.metric("Total fire radiative power (FRP)", f"{df_prov_filt['frp_sum_snpp'].sum():,.0f} MW")
+    c4.metric("Rata-rata anomali ONI", f"{df_prov_filt['oni_anom'].mean():.2f} °C")
     show_visual_guide("angka ringkasan", [
-        ("Titik panas", "Tanda dari satelit bahwa ada lokasi yang sangat panas; ini petunjuk kebakaran, bukan hitungan luas area terbakar."),
-        ("Keyakinan tinggi", "Titik panas yang sinyal satelitnya dinilai lebih meyakinkan."),
-        ("Kekuatan panas (MW)", "Ukuran energi panas yang terdeteksi. Nilai lebih besar berarti sinyal panas lebih kuat."),
-        ("Perubahan suhu Pasifik", "Perbedaan suhu laut Pasifik dari kondisi biasanya; dapat berkaitan dengan musim kering atau basah."),
+        ("Hotspot (titik panas)", "Anomali suhu yang dideteksi satelit dan dapat mengindikasikan kebakaran. Hotspot bukan pengukuran luas area terbakar."),
+        ("Confidence tinggi", "Deteksi dengan tingkat keyakinan lebih tinggi berdasarkan karakteristik sinyal satelit."),
+        ("Fire radiative power (FRP)", "Estimasi daya radiasi dari sumber panas dalam megawatt (MW); nilai lebih tinggi menunjukkan sinyal panas lebih kuat."),
+        ("Anomali ONI", "Penyimpangan suhu permukaan laut Pasifik dari kondisi normal; berkaitan dengan variasi iklim seperti El Niño dan La Niña."),
     ])
 
     st.markdown("---")
     col_left, col_right = st.columns([1.4, 1])
 
     with col_left:
-        st.subheader("Perubahan suhu laut Pasifik dan jumlah titik panas dari waktu ke waktu")
+        st.subheader("Tren anomali suhu Pasifik dan jumlah hotspot")
         tren_iklim = df_prov_filt.groupby("periode", as_index=False).agg({
             "hotspots_snpp": "sum",
             "oni_anom": "mean",
@@ -141,44 +142,44 @@ with tab1:
         })
         fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
         fig_dual.add_trace(
-            go.Bar(x=tren_iklim["periode"], y=tren_iklim["hotspots_snpp"], name="Jumlah titik panas", marker_color=ACCENT_GREEN, opacity=0.75),
+            go.Bar(x=tren_iklim["periode"], y=tren_iklim["hotspots_snpp"], name="Jumlah hotspot", marker_color=ACCENT_GREEN, opacity=0.75),
             secondary_y=False
         )
         fig_dual.add_trace(
-            go.Scatter(x=tren_iklim["periode"], y=tren_iklim["oni_anom"], name="Perubahan suhu Pasifik (°C)", line=dict(color=ALERT_RED, width=2.5)),
+            go.Scatter(x=tren_iklim["periode"], y=tren_iklim["oni_anom"], name="Anomali ONI (°C)", line=dict(color=ALERT_RED, width=2.5)),
             secondary_y=True
         )
         fig_dual.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=400, margin=dict(l=10, r=10, t=30, b=10), legend=dict(orientation="h", y=1.12))
-        fig_dual.update_yaxes(title_text="Jumlah titik panas", secondary_y=False)
-        fig_dual.update_yaxes(title_text="Perubahan suhu Pasifik (°C)", secondary_y=True)
+        fig_dual.update_yaxes(title_text="Jumlah hotspot", secondary_y=False)
+        fig_dual.update_yaxes(title_text="Anomali ONI (°C)", secondary_y=True)
         st.plotly_chart(fig_dual, use_container_width=True)
         show_visual_guide("grafik cuaca dan titik panas", [
             ("Sumbu mendatar", "Bulan dan tahun pengamatan."),
-            ("Batang hijau", "Jumlah titik panas yang terdeteksi pada bulan tersebut."),
-            ("Garis merah", "Perubahan suhu permukaan laut Pasifik dari keadaan biasanya (ONI)."),
+            ("Batang hijau", "Jumlah hotspot yang terdeteksi pada bulan tersebut."),
+            ("Garis merah", "Anomali suhu permukaan laut Pasifik yang dirangkum dalam indeks ONI."),
             ("Cara membaca", "Lihat apakah jumlah titik panas dan garis suhu naik pada waktu yang sama. Ini menunjukkan hubungan waktu, bukan bukti bahwa satu hal pasti menyebabkan yang lain."),
         ])
 
     with col_right:
-        st.subheader("10 provinsi dengan titik panas terbanyak")
+        st.subheader("10 provinsi dengan jumlah hotspot tertinggi")
         top10_p = df_prov_filt.groupby("provinsi_id", as_index=False)["hotspots_snpp"].sum().sort_values("hotspots_snpp", ascending=True).tail(10)
         fig_bar_p = px.bar(
             top10_p, x="hotspots_snpp", y="provinsi_id", orientation="h",
-            labels={"hotspots_snpp": "Jumlah titik panas", "provinsi_id": "Provinsi"},
+            labels={"hotspots_snpp": "Jumlah hotspot", "provinsi_id": "Provinsi"},
             color_discrete_sequence=[PRIMARY_GREEN], template="plotly_dark"
         )
         fig_bar_p.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=400, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_bar_p, use_container_width=True)
         show_visual_guide("peringkat provinsi", [
             ("Nama provinsi", "Wilayah yang dibandingkan."),
-            ("Panjang batang", "Jumlah titik panas yang tercatat; batang lebih panjang berarti jumlahnya lebih banyak."),
-            ("Catatan", "Peringkat ini berdasarkan jumlah deteksi, bukan ukuran luas kebakaran atau tingkat bahaya."),
+            ("Panjang batang", "Jumlah hotspot yang tercatat; batang lebih panjang menunjukkan lebih banyak deteksi."),
+            ("Catatan", "Peringkat berdasarkan jumlah deteksi, bukan luas area terbakar atau tingkat risiko."),
         ])
 
     st.markdown("---")
     climate_col, rain_col = st.columns(2)
     with climate_col:
-        st.subheader("Rata-rata titik panas per hari menurut kondisi laut")
+        st.subheader("Estimasi hotspot harian menurut fase ENSO dan IOD")
         if {"status_enso", "status_iod", "periode"}.issubset(df_prov_filt.columns):
             hotspot_col = "jumlah_hotspot" if "jumlah_hotspot" in df_prov_filt.columns else (
                 "hotspots_snpp" if "hotspots_snpp" in df_prov_filt.columns else None
@@ -207,9 +208,9 @@ with tab1:
                         "Positive IOD": ALERT_RED,
                     },
                     labels={
-                        "status_enso": "Kondisi Samudra Pasifik",
-                        "rata_hotspot_harian": "Perkiraan titik panas per hari",
-                        "status_iod": "Kondisi Samudra Hindia",
+                        "status_enso": "Fase ENSO",
+                        "rata_hotspot_harian": "Estimasi hotspot per hari",
+                        "status_iod": "Fase IOD",
                     },
                     template="plotly_dark",
                 )
@@ -221,11 +222,11 @@ with tab1:
                 st.caption(
                     "Perkiraan per hari dibuat dari jumlah bulanan dibagi jumlah hari dalam bulan. Data sumber hanya tersedia per bulan."
                 )
-                show_visual_guide("rata-rata titik panas menurut kondisi laut", [
-                    ("El Nino / Netral / La Nina", "Kelompok kondisi suhu laut di Samudra Pasifik."),
-                    ("IOD negatif / netral / positif", "Kelompok kondisi suhu laut di Samudra Hindia."),
-                    ("Tinggi batang", "Perkiraan rata-rata titik panas per hari untuk gabungan kondisi yang sama."),
-                    ("Warna", "Membedakan kondisi Samudra Hindia di dalam setiap kelompok Pasifik."),
+                show_visual_guide("estimasi hotspot menurut fase iklim", [
+                    ("Fase ENSO", "Klasifikasi kondisi suhu permukaan laut di Samudra Pasifik: El Niño, netral, atau La Niña."),
+                    ("Fase IOD", "Klasifikasi kondisi suhu permukaan laut di Samudra Hindia: negatif, netral, atau positif."),
+                    ("Tinggi batang", "Estimasi rata-rata hotspot per hari untuk kombinasi fase ENSO dan IOD tersebut."),
+                    ("Warna", "Membedakan fase IOD pada setiap kelompok ENSO."),
                 ])
             else:
                 st.info("Kolom jumlah hotspot tidak tersedia pada data terfilter.")
@@ -233,7 +234,7 @@ with tab1:
             st.info("Kolom ENSO, IOD, atau periode tidak tersedia pada data terfilter.")
 
     with rain_col:
-        st.subheader("Curah hujan dan jumlah titik panas di tiap provinsi")
+        st.subheader("Curah hujan dan jumlah hotspot per provinsi")
         hotspot_col = "jumlah_hotspot" if "jumlah_hotspot" in df_prov_filt.columns else (
             "hotspots_snpp" if "hotspots_snpp" in df_prov_filt.columns else None
         )
@@ -254,8 +255,8 @@ with tab1:
                 },
                 labels={
                     "curah_hujan": "Curah hujan rata-rata",
-                    "total_hotspot": "Jumlah titik panas",
-                    "status_enso": "Kondisi Pasifik",
+                    "total_hotspot": "Jumlah hotspot",
+                    "status_enso": "Fase ENSO",
                     "provinsi_id": "Provinsi",
                 },
                 template="plotly_dark",
@@ -265,12 +266,12 @@ with tab1:
                 height=380, margin=dict(l=10, r=10, t=30, b=10),
             )
             st.plotly_chart(fig_rain, use_container_width=True)
-            show_visual_guide("curah hujan dan titik panas", [
-                ("Setiap titik", "Satu provinsi dalam satu kelompok kondisi Pasifik."),
-                ("Posisi mendatar", "Rata-rata curah hujan; titik lebih ke kanan berarti hujan lebih tinggi."),
-                ("Posisi tegak", "Jumlah titik panas yang tercatat; titik lebih tinggi berarti jumlahnya lebih banyak."),
-                ("Warna titik", "Kondisi suhu laut Pasifik pada kelompok tersebut."),
-                ("Nama saat diarahkan", "Menampilkan provinsi dan jumlah titik panas."),
+            show_visual_guide("curah hujan dan hotspot", [
+                ("Setiap titik", "Satu provinsi pada satu fase ENSO."),
+                ("Sumbu X", "Rata-rata curah hujan; posisi lebih ke kanan menunjukkan curah hujan lebih tinggi."),
+                ("Sumbu Y", "Jumlah hotspot yang tercatat; posisi lebih tinggi menunjukkan lebih banyak deteksi."),
+                ("Warna", "Menunjukkan fase ENSO."),
+                ("Detail saat diarahkan", "Menampilkan nama provinsi dan jumlah hotspot."),
             ])
         else:
             st.info("Kolom provinsi, ENSO, curah hujan, atau hotspot tidak tersedia pada data terfilter.")
@@ -278,23 +279,44 @@ with tab1:
 # ==============================================================================
 # TAB 2: KERENTANAN LAHAN GAMBUT (KHG)
 # ==============================================================================
+def filter_tab2_data(data):
+    filtered = data[
+        data["tahun"].between(tahun_range[0], tahun_range[1])
+    ].copy()
+    if selected_prov != "Semua Provinsi":
+        filtered = filtered[filtered["provinsi_id"] == selected_prov]
+    if selected_enso != "Semua Fase":
+        filtered = filtered[filtered["status_enso"] == selected_enso]
+    return filtered
+
+
 with tab2:
-    mask_g = (df_gambut["tahun"] >= tahun_range[0]) & (df_gambut["tahun"] <= tahun_range[1])
-    df_g_filt = df_gambut[mask_g].copy()
+    st.caption(
+        "Seluruh visualisasi tab ini mengikuti filter rentang tahun, provinsi, dan fase ENSO."
+    )
+    df_g_filt = filter_tab2_data(df_gambut)
     df_g_filt["Tipe Lahan"] = df_g_filt["is_lahan_gambut"].map({1: "Di gambut", 0: "Di luar gambut"})
 
     total_all = df_g_filt["jumlah_hotspot"].sum()
     total_peat = df_g_filt[df_g_filt["is_lahan_gambut"] == 1]["jumlah_hotspot"].sum()
     pct_peat = (total_peat / total_all * 100) if total_all > 0 else 0
-    has_province_gambut = "provinsi_id" in df_g_filt.columns
+    df_top_khg_filt = filter_tab2_data(df_top_khg)
+    top_khg_summary = (
+        df_top_khg_filt.groupby("kode_khg", as_index=False)["jumlah_hotspot"]
+        .sum()
+        .sort_values("jumlah_hotspot", ascending=False)
+    )
 
     g1, g2, g3 = st.columns(3)
-    g1.metric("Titik panas di lahan gambut", f"{int(total_peat):,}")
-    g2.metric("Bagian titik panas di gambut", f"{pct_peat:.2f}%")
-    g3.metric("Wilayah gambut dengan titik panas terbanyak", df_top_khg.iloc[0]["kode_khg"] if not df_top_khg.empty else "-")
+    g1.metric("Hotspot terdeteksi di lahan gambut", f"{int(total_peat):,}")
+    g2.metric("Proporsi hotspot di gambut", f"{pct_peat:.2f}%")
+    g3.metric(
+        "KHG dengan jumlah hotspot tertinggi",
+        top_khg_summary.iloc[0]["kode_khg"] if not top_khg_summary.empty else "-",
+    )
     show_visual_guide("angka ringkasan lahan gambut", [
         ("Lahan gambut (KHG)", "Lahan gambut yang berada di dalam peta Kesatuan Hidrologis Gambut (KHG)."),
-        ("Bagian titik panas di gambut", "Persentase titik panas yang lokasinya berada di gambut dibandingkan seluruh titik panas pada data."),
+        ("Proporsi hotspot di gambut", "Persentase hotspot yang terdeteksi di lahan gambut dibandingkan seluruh hotspot dalam data."),
         ("Kode KHG", "Kode untuk mengenali satu wilayah bentang lahan gambut."),
     ])
 
@@ -302,50 +324,53 @@ with tab2:
     c_g1, c_g2 = st.columns([1.3, 1])
 
     with c_g1:
-        st.subheader("Perubahan jumlah titik panas di gambut dan di luar gambut")
-        fig_area = px.area(
-            df_g_filt, x="periode", y="jumlah_hotspot", color="Tipe Lahan",
-            color_discrete_map={"Di gambut": PRIMARY_GREEN, "Di luar gambut": NEUTRAL_GRAY},
-            labels={"periode": "Waktu", "jumlah_hotspot": "Jumlah titik panas"},
-            template="plotly_dark"
-        )
-        fig_area.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=380, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig_area, use_container_width=True)
-        show_visual_guide("tren titik panas di lahan", [
-            ("Sumbu mendatar", "Bulan dan tahun pengamatan."),
-            ("Sumbu tegak", "Jumlah titik panas yang terdeteksi."),
-            ("Warna hijau / abu-abu", "Membedakan titik panas di gambut dan di luar gambut."),
-            ("Luas berwarna", "Menunjukkan perubahan jumlah dari waktu ke waktu; perhatikan bahwa jumlah tiap kategori dijumlahkan per bulan."),
+        st.subheader("Tren jumlah hotspot di lahan gambut dan non-gambut")
+        if not df_g_filt.empty:
+            trend_by_month = df_g_filt.groupby(
+                ["periode", "Tipe Lahan"], as_index=False
+            )["jumlah_hotspot"].sum()
+            fig_area = px.area(
+                trend_by_month, x="periode", y="jumlah_hotspot", color="Tipe Lahan",
+                color_discrete_map={"Di gambut": PRIMARY_GREEN, "Di luar gambut": NEUTRAL_GRAY},
+                labels={"periode": "Periode", "jumlah_hotspot": "Jumlah hotspot"},
+                template="plotly_dark"
+            )
+            fig_area.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=380, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_area, use_container_width=True)
+        else:
+            st.info("Tidak ada data hotspot untuk kombinasi filter yang dipilih.")
+        show_visual_guide("tren hotspot menurut kategori lahan", [
+            ("Sumbu X", "Bulan dan tahun pengamatan."),
+            ("Sumbu Y", "Jumlah hotspot yang terdeteksi."),
+            ("Warna hijau / abu-abu", "Membedakan hotspot di lahan gambut dan non-gambut."),
+            ("Area berwarna", "Menunjukkan perubahan jumlah dari waktu ke waktu; nilai setiap kategori dijumlahkan per bulan."),
         ])
 
     with c_g2:
-        st.subheader("10 wilayah gambut dengan titik panas terbanyak")
-        fig_khg = px.bar(
-            df_top_khg.head(10).sort_values("jumlah_hotspot", ascending=True),
-            x="jumlah_hotspot", y="kode_khg", orientation="h",
-            color_discrete_sequence=[ALERT_RED],
-            labels={"jumlah_hotspot": "Jumlah titik panas", "kode_khg": "Kode wilayah gambut"},
-            template="plotly_dark"
-        )
-        fig_khg.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=380, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig_khg, use_container_width=True)
+        st.subheader("10 wilayah KHG dengan jumlah hotspot tertinggi")
+        if not top_khg_summary.empty:
+            fig_khg = px.bar(
+                top_khg_summary.head(10).sort_values("jumlah_hotspot", ascending=True),
+                x="jumlah_hotspot", y="kode_khg", orientation="h",
+                color_discrete_sequence=[ALERT_RED],
+                labels={"jumlah_hotspot": "Jumlah hotspot", "kode_khg": "Kode KHG"},
+                template="plotly_dark"
+            )
+            fig_khg.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=380, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_khg, use_container_width=True)
+        else:
+            st.info("Tidak ada data wilayah KHG untuk kombinasi filter yang dipilih.")
         show_visual_guide("peringkat wilayah gambut", [
             ("Kode wilayah", "Identitas wilayah gambut pada peta KHG."),
-            ("Panjang batang", "Jumlah titik panas pada wilayah itu; batang lebih panjang berarti lebih banyak deteksi."),
-            ("Catatan", "Banyaknya titik panas tidak langsung menunjukkan luas area yang terbakar."),
+            ("Panjang batang", "Jumlah hotspot pada wilayah tersebut; batang lebih panjang menunjukkan lebih banyak deteksi."),
+            ("Catatan", "Jumlah hotspot tidak secara langsung menunjukkan luas area terbakar."),
         ])
 
     st.markdown("---")
     peat_col, insight_col = st.columns(2)
     with peat_col:
-        st.subheader("Sebaran kekuatan panas yang terdeteksi: gambut dan luar gambut")
-        df_frp = df_peta.copy()
-        if "tahun" in df_frp.columns:
-            df_frp = df_frp[
-                (df_frp["tahun"] >= tahun_range[0]) & (df_frp["tahun"] <= tahun_range[1])
-            ].copy()
-        if "provinsi_id" in df_frp.columns and selected_prov != "Semua Provinsi":
-            df_frp = df_frp[df_frp["provinsi_id"] == selected_prov]
+        st.subheader("Distribusi fire radiative power (FRP) menurut kategori lahan")
+        df_frp = filter_tab2_data(df_frp_sample)
         if {"is_lahan_gambut", "frp"}.issubset(df_frp.columns):
             df_frp["Tipe Lahan"] = df_frp["is_lahan_gambut"].map(
                 {1: "Di gambut", 0: "Di luar gambut"}
@@ -359,7 +384,7 @@ with tab2:
                     color_discrete_map={
                         "Di gambut": ACCENT_GREEN, "Di luar gambut": NEUTRAL_GRAY
                     },
-                    labels={"frp": "Kekuatan panas terukur (MW)", "Tipe Lahan": "Jenis lahan"},
+                    labels={"frp": "Fire radiative power (MW)", "Tipe Lahan": "Kategori lahan"},
                     template="plotly_dark",
                 )
                 fig_frp.update_layout(
@@ -367,19 +392,23 @@ with tab2:
                     height=380, showlegend=False, margin=dict(l=10, r=10, t=30, b=10),
                 )
                 st.plotly_chart(fig_frp, use_container_width=True)
-                show_visual_guide("kekuatan panas di tiap jenis lahan", [
-                    ("FRP / MW", "FRP adalah perkiraan kekuatan panas dari satelit; MW (megawatt) adalah satuan ukurannya."),
-                    ("Garis di dalam kotak", "Nilai tengah: kira-kira separuh data berada di bawah dan separuh di atasnya."),
-                    ("Kotak", "Rentang bagian tengah data, sehingga terlihat sebaran nilai yang umum."),
-                    ("Cara membandingkan", "Kotak atau garis tengah yang lebih tinggi menunjukkan nilai FRP yang cenderung lebih besar."),
+                st.caption(
+                    "Boxplot memakai sampel acak hingga 50.000 titik pada filter aktif. "
+                    "Rata-rata FRP menggunakan agregat seluruh data."
+                )
+                show_visual_guide("distribusi FRP menurut kategori lahan", [
+                    ("FRP (MW)", "Estimasi daya radiasi api dari satelit; MW (megawatt) adalah satuan pengukurannya."),
+                    ("Garis di dalam kotak", "Median: sekitar separuh observasi berada di bawah dan separuh di atas nilai ini."),
+                    ("Kotak", "Rentang antarkuartil yang merangkum 50% observasi di bagian tengah distribusi."),
+                    ("Perbandingan", "Kotak atau median yang lebih tinggi menunjukkan nilai FRP yang cenderung lebih besar."),
                 ])
             else:
-                st.info("Tidak ada observasi FRP pada rentang tahun yang dipilih.")
+                st.info("Tidak ada observasi FRP untuk kombinasi filter yang dipilih.")
         else:
             st.info("Kolom FRP atau kategori lahan tidak tersedia pada data sampel.")
 
     with insight_col:
-        st.subheader("Apakah perubahan di gambut berjalan seiring dengan total titik panas?")
+        st.subheader("Hubungan proporsi hotspot gambut dengan total hotspot")
         peat_by_month = df_g_filt.pivot_table(
             index="periode", columns="is_lahan_gambut",
             values="jumlah_hotspot", aggfunc="sum", fill_value=0,
@@ -399,7 +428,7 @@ with tab2:
                     "sedang" if abs(corr) < 0.7 else "kuat"
                 )
                 direction = "positif" if corr >= 0 else "negatif"
-                st.metric("Angka hubungan antara bagian titik panas gambut dan total", f"{corr:.2f}")
+                st.metric("Korelasi proporsi hotspot gambut dan total hotspot", f"{corr:.2f}")
                 st.caption(
                     f"Hubungannya {direction} dan {strength} pada {len(paired)} bulan yang tersedia. "
                     "Ini menunjukkan dua hal bergerak bersama, bukan bukti sebab-akibat."
@@ -408,19 +437,22 @@ with tab2:
                     ("Angka mendekati +1", "Keduanya cenderung naik atau turun bersama."),
                     ("Angka mendekati 0", "Tidak terlihat pola gerak bersama yang jelas."),
                     ("Angka mendekati -1", "Saat satu naik, yang lain cenderung turun."),
-                    ("Batas data", "Perhitungan memakai data bulanan gabungan seluruh provinsi, karena data gambut tidak mencantumkan provinsi."),
+                    ("Batas data", "Perhitungan memakai agregat bulanan untuk provinsi, rentang tahun, dan fase ENSO sesuai filter aktif. Korelasi menunjukkan asosiasi, bukan sebab-akibat."),
                 ])
             else:
                 st.info("Data bulanan tidak cukup untuk menghitung korelasi.")
         else:
             st.info("Kedua kategori lahan harus tersedia untuk menghitung korelasi.")
 
-        frp_means = (
-            df_frp.groupby("Tipe Lahan")["frp"].mean()
-            if {"Tipe Lahan", "frp"}.issubset(df_frp.columns) else pd.Series(dtype=float)
+        frp_summary = df_g_filt.groupby("is_lahan_gambut").agg(
+            jumlah_observasi_frp=("frp_observations", "sum"),
+            total_frp=("total_frp", "sum"),
         )
-        frp_gambut = frp_means.get("Di gambut", np.nan)
-        frp_non_gambut = frp_means.get("Di luar gambut", np.nan)
+        frp_means = frp_summary["total_frp"].div(
+            frp_summary["jumlah_observasi_frp"].replace(0, np.nan)
+        )
+        frp_gambut = frp_means.get(1, np.nan)
+        frp_non_gambut = frp_means.get(0, np.nan)
         metric_cols = st.columns(2)
         metric_cols[0].metric(
             "Rata-rata kekuatan panas di gambut",
@@ -436,33 +468,53 @@ with tab2:
             "belum bisa dihitung dengan benar."
         )
         show_visual_guide("rata-rata kekuatan panas", [
-            ("Nilai gambut", "Rata-rata kekuatan panas satelit pada sampel titik yang berada di gambut."),
-            ("Nilai luar gambut", "Rata-rata kekuatan panas satelit pada sampel titik di luar gambut."),
+            ("Nilai gambut", "Rata-rata FRP dari seluruh observasi yang berada di gambut pada filter aktif."),
+            ("Nilai luar gambut", "Rata-rata FRP dari seluruh observasi yang berada di luar gambut pada filter aktif."),
             ("MW", "Satuan kekuatan panas yang terdeteksi satelit."),
-            ("Sampel", "Angka dihitung dari sebagian titik panas yang tersedia, bukan seluruh kejadian."),
+            ("Cakupan", "Rata-rata dihitung dari agregat seluruh data; hanya boxplot distribusi yang memakai sampel acak."),
         ])
-        if selected_prov != "Semua Provinsi" and not has_province_gambut:
-            st.caption(
-                "Data bulanan gambut dan sampel FRP tidak memiliki kolom provinsi; analisis ini "
-                "tetap agregat nasional untuk filter provinsi."
-            )
-
-    st.subheader("Peta lokasi titik panas pada gambut dan di luar gambut")
-    df_peta_plot = df_peta.copy()
-    df_peta_plot["Status Lahan"] = df_peta_plot["is_lahan_gambut"].map({1: "Di gambut", 0: "Di luar gambut"})
-    fig_map = px.scatter_map(
-        df_peta_plot, lat="latitude", lon="longitude", color="Status Lahan",
-        color_discrete_map={"Di gambut": ALERT_RED, "Di luar gambut": ACCENT_GREEN},
-        zoom=3.8, center={"lat": -2.2, "lon": 117.5}, height=420, opacity=0.65
+    st.subheader("Peta persebaran hotspot pada lahan gambut dan non-gambut")
+    df_peta_plot = filter_tab2_data(df_peta)
+    df_peta_plot["Status Lahan"] = df_peta_plot["is_lahan_gambut"].map(
+        {1: "Lahan gambut", 0: "Non-gambut"}
     )
-    fig_map.update_layout(map_style="carto-positron", margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig_map, use_container_width=True)
-    show_visual_guide("peta titik panas", [
-        ("Setiap titik", "Satu lokasi titik panas dalam sampel data."),
-        ("Warna merah", "Lokasi yang berada di lahan gambut."),
-        ("Warna hijau", "Lokasi yang berada di luar lahan gambut."),
-        ("Peta", "Membantu melihat sebaran lokasi; titik berdekatan belum tentu satu kebakaran yang sama."),
-    ])
+    if not df_peta_plot.empty:
+        fig_map = px.scatter_map(
+            df_peta_plot, lat="latitude", lon="longitude", color="Status Lahan",
+            hover_data={
+                "tahun": True,
+                "bulan": True,
+                "frp": ":.2f",
+                "kode_khg": True,
+                "latitude": False,
+                "longitude": False,
+            },
+            labels={
+                "tahun": "Tahun",
+                "bulan": "Bulan",
+                "frp": "FRP (MW)",
+                "kode_khg": "Kode KHG",
+                "Status Lahan": "Kategori lahan",
+            },
+            color_discrete_map={"Lahan gambut": ALERT_RED, "Non-gambut": ACCENT_GREEN},
+            zoom=3.8, center={"lat": -2.2, "lon": 117.5}, height=420, opacity=0.65
+        )
+        fig_map.update_layout(map_style="carto-positron", margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_map, use_container_width=True)
+        st.caption(
+            f"Peta menampilkan {len(df_peta_plot):,} titik dari sampel berstrata berdasarkan provinsi, "
+            "tahun, bulan, dan kategori lahan. Semua filter aktif diterapkan; jumlah marker bukan "
+            "jumlah total hotspot."
+        )
+        show_visual_guide("peta persebaran hotspot", [
+            ("Setiap marker", "Satu observasi hotspot dari sampel data; bukan jumlah seluruh kejadian."),
+            ("Warna merah", "Lokasi observasi yang diklasifikasikan berada di lahan gambut."),
+            ("Warna hijau", "Lokasi observasi yang diklasifikasikan berada di luar lahan gambut."),
+            ("FRP (MW)", "Estimasi daya radiasi api pada observasi tersebut; bukan luas area terbakar."),
+            ("Batas interpretasi", "Peta menunjukkan lokasi sampel. Marker yang berdekatan belum tentu berasal dari satu kejadian kebakaran yang sama."),
+        ])
+    else:
+        st.info("Tidak ada observasi hotspot pada rentang tahun yang dipilih.")
 
 # ==============================================================================
 # TAB 3: KUALITAS UDARA (ISPU) & DAMPAK KESEHATAN ISPA
@@ -473,52 +525,52 @@ with tab3:
         df_ispu_filt = df_ispu_filt[df_ispu_filt["provinsi_id"] == selected_prov]
 
     i1, i2, i3 = st.columns(3)
-    i1.metric("Rata-rata partikel halus di udara", f"{df_ispu_filt['pm25_concentration_ugm3'].mean():.1f} µg/m³")
-    i2.metric("Rata-rata tingkat pencemaran udara", f"{df_ispu_filt['ispu_calculated_index'].mean():.1f}")
-    i3.metric("Perkiraan kebutuhan layanan gangguan pernapasan", f"{df_ispu_filt['projected_ispa_clinic_burden_score'].mean():.2f} / 10")
+    i1.metric("Rata-rata konsentrasi PM2.5", f"{df_ispu_filt['pm25_concentration_ugm3'].mean():.1f} µg/m³")
+    i2.metric("Rata-rata indeks kualitas udara", f"{df_ispu_filt['ispu_calculated_index'].mean():.1f}")
+    i3.metric("Estimasi skor beban layanan ISPA", f"{df_ispu_filt['projected_ispa_clinic_burden_score'].mean():.2f} / 10")
     show_visual_guide("angka ringkasan udara dan kesehatan", [
-        ("Partikel halus (PM2.5)", "Debu atau asap sangat kecil yang dapat masuk jauh ke paru-paru. Angka lebih tinggi berarti lebih banyak partikel terukur."),
-        ("Tingkat pencemaran udara", "Angka ringkasan kondisi udara; nilai lebih tinggi berarti kualitas udara lebih buruk."),
-        ("Kebutuhan layanan gangguan pernapasan", "Perkiraan skor kebutuhan layanan kesehatan pada skala 0–10, bukan jumlah pasien."),
+        ("Partikulat halus (PM2.5)", "Partikel sangat kecil dari debu atau asap yang dapat masuk jauh ke paru-paru. Nilai lebih tinggi berarti konsentrasi terukur lebih besar."),
+        ("Indeks kualitas udara", "Indikator ringkas kondisi pencemaran udara; nilai lebih tinggi berarti kualitas udara lebih buruk."),
+        ("Skor beban layanan ISPA", "Estimasi kebutuhan layanan kesehatan gangguan pernapasan pada skala 0–10, bukan jumlah pasien."),
     ])
 
     st.markdown("---")
     col_i1, col_i2 = st.columns(2)
 
     with col_i1:
-        st.subheader("Udara yang sulit bergerak, asap, dan partikel halus")
+        st.subheader("Indeks stagnasi atmosfer, asap karhutla, dan konsentrasi PM2.5")
         df_ispu_filt["Status Kabut Asap"] = df_ispu_filt["wildfire_smoke_plume_flag"].map({True: "Terdeteksi Asap Karhutla", False: "Non-Asap Karhutla"})
         fig_scat = px.scatter(
             df_ispu_filt.sample(n=min(3000, len(df_ispu_filt)), random_state=42),
             x="atmospheric_stagnation_index", y="pm25_concentration_ugm3",
             color="Status Kabut Asap",
             color_discrete_map={"Terdeteksi Asap Karhutla": ALERT_RED, "Non-Asap Karhutla": ACCENT_GREEN},
-            labels={"atmospheric_stagnation_index": "Seberapa sulit udara bergerak (0-10)", "pm25_concentration_ugm3": "Partikel halus di udara (µg/m³)"},
+            labels={"atmospheric_stagnation_index": "Indeks stagnasi atmosfer (0–10)", "pm25_concentration_ugm3": "Konsentrasi PM2.5 (µg/m³)"},
             opacity=0.65
         )
         fig_scat.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_scat, use_container_width=True)
-        show_visual_guide("udara sulit bergerak dan partikel halus", [
+        show_visual_guide("stagnasi atmosfer dan konsentrasi PM2.5", [
             ("Setiap titik", "Satu pengamatan kualitas udara."),
-            ("Posisi mendatar", "Skor keadaan udara yang sulit bergerak; nilai lebih tinggi berarti udara lebih stagnan."),
-            ("Posisi tegak", "Jumlah partikel halus PM2.5 yang terukur."),
-            ("Merah / hijau", "Pengamatan yang ditandai ada / tidak ada jejak asap kebakaran."),
-            ("Cara membaca", "Lihat apakah nilai partikel halus cenderung lebih tinggi pada skor stagnasi atau kelompok asap tertentu. Pola ini bukan bukti sebab-akibat."),
+            ("Sumbu X", "Indeks stagnasi atmosfer; nilai lebih tinggi menunjukkan pergerakan udara lebih terbatas."),
+            ("Sumbu Y", "Konsentrasi partikulat halus PM2.5 yang terukur."),
+            ("Merah / hijau", "Pengamatan dengan / tanpa indikasi plume asap karhutla."),
+            ("Interpretasi", "Bandingkan konsentrasi PM2.5 pada tingkat stagnasi atau kelompok asap yang berbeda. Pola ini tidak membuktikan hubungan sebab-akibat."),
         ])
 
     with col_i2:
-        st.subheader("Perkiraan kebutuhan layanan gangguan pernapasan per provinsi")
+        st.subheader("Estimasi skor beban layanan ISPA per provinsi")
         prov_ispa = df_ispu.groupby("provinsi_id", as_index=False)["projected_ispa_clinic_burden_score"].mean().sort_values("projected_ispa_clinic_burden_score", ascending=True).tail(12)
         fig_ispa_bar = px.bar(
             prov_ispa, x="projected_ispa_clinic_burden_score", y="provinsi_id", orientation="h",
             color_discrete_sequence=[PRIMARY_GREEN],
-            labels={"projected_ispa_clinic_burden_score": "Skor perkiraan kebutuhan layanan (0-10)", "provinsi_id": "Provinsi"}
+            labels={"projected_ispa_clinic_burden_score": "Skor estimasi beban layanan ISPA (0–10)", "provinsi_id": "Provinsi"}
         )
         fig_ispa_bar.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
         st.plotly_chart(fig_ispa_bar, use_container_width=True)
-        show_visual_guide("peringkat kebutuhan layanan kesehatan", [
+        show_visual_guide("peringkat skor beban layanan kesehatan", [
             ("Nama provinsi", "Wilayah yang dibandingkan."),
-            ("Panjang batang", "Skor perkiraan kebutuhan layanan untuk gangguan pernapasan; batang lebih panjang berarti skor lebih tinggi."),
+            ("Panjang batang", "Skor estimasi beban layanan gangguan pernapasan; batang lebih panjang menunjukkan skor lebih tinggi."),
             ("Skala 0–10", "Skor ringkasan, bukan jumlah pasien yang datang ke fasilitas kesehatan."),
         ])
 
@@ -526,11 +578,11 @@ with tab3:
 # TAB 4: PERINGATAN DINI & FEATURE IMPORTANCE (RANDOM FOREST)
 # ==============================================================================
 with tab4:
-    st.subheader("Perkiraan risiko kebakaran harian")
+    st.subheader("Prediksi risiko karhutla harian")
     p1, p2 = st.columns([1, 1.4])
 
     with p1:
-        st.markdown("**Faktor yang paling banyak dipakai dalam perkiraan risiko**")
+        st.markdown("**Kepentingan fitur pada model prediksi**")
         df_fi_plot = df_fi.copy()
         df_fi_plot["fitur"] = (
             df_fi_plot["fitur"].astype(str).str.replace("_", " ", regex=False).str.capitalize()
@@ -539,19 +591,19 @@ with tab4:
             df_fi_plot.sort_values("importance", ascending=True),
             x="importance", y="fitur", orientation="h",
             color_discrete_sequence=[ACCENT_GREEN],
-            labels={"importance": "Seberapa banyak faktor dipakai model", "fitur": "Faktor"},
+            labels={"importance": "Feature importance", "fitur": "Fitur"},
             template="plotly_dark"
         )
         fig_fi.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=380, margin=dict(l=10, r=10, t=20, b=10))
         st.plotly_chart(fig_fi, use_container_width=True)
-        show_visual_guide("faktor dalam perkiraan risiko", [
-            ("Nama faktor", "Informasi cuaca atau kondisi yang dipertimbangkan sistem."),
-            ("Panjang batang", "Seberapa banyak faktor tersebut digunakan oleh model untuk membuat perkiraan."),
-            ("Penting", "Batang panjang bukan berarti faktor itu pasti menyebabkan kebakaran."),
+        show_visual_guide("feature importance model prediksi", [
+            ("Fitur", "Variabel cuaca atau kondisi yang digunakan model untuk menghasilkan prediksi."),
+            ("Panjang batang", "Nilai feature importance; semakin tinggi nilainya, semakin besar kontribusi relatif fitur pada model."),
+            ("Catatan", "Feature importance tidak menunjukkan bahwa fitur tersebut menyebabkan kebakaran."),
         ])
 
     with p2:
-        st.markdown("**Hari dan wilayah dengan perkiraan risiko tinggi**")
+        st.markdown("**Tanggal dan wilayah dengan prediksi risiko tinggi**")
         df_alert = df_pred.copy()
         if "tanggal" in df_alert.columns:
             df_alert["tanggal"] = pd.to_datetime(df_alert["tanggal"], errors="coerce")
@@ -597,20 +649,20 @@ with tab4:
         alert_table = df_alert[alert_columns].copy().rename(columns={
             "tanggal": "Tanggal",
             "provinsi_id": "Provinsi",
-            "probabilitas_karhutla": "Perkiraan peluang risiko (%)",
-            "hotspots_snpp": "Titik panas terdeteksi",
+            "probabilitas_karhutla": "Probabilitas prediksi risiko (%)",
+            "hotspots_snpp": "Hotspot terdeteksi",
             "curah_hujan": "Curah hujan",
-            "oni_anom": "Perubahan suhu Pasifik (°C)",
+            "oni_anom": "Anomali ONI (°C)",
         })
-        if "Perkiraan peluang risiko (%)" in alert_table.columns:
-            alert_table["Perkiraan peluang risiko (%)"] = (
-                pd.to_numeric(alert_table["Perkiraan peluang risiko (%)"], errors="coerce") * 100
+        if "Probabilitas prediksi risiko (%)" in alert_table.columns:
+            alert_table["Probabilitas prediksi risiko (%)"] = (
+                pd.to_numeric(alert_table["Probabilitas prediksi risiko (%)"], errors="coerce") * 100
             ).round(1)
         st.dataframe(alert_table.head(100), use_container_width=True, height=380)
-        show_visual_guide("angka ringkasan dan daftar peringatan", [
-            ("Jumlah peringatan", "Banyaknya hari dalam data terpilih yang berstatus risiko tinggi atau memiliki peluang minimal 50%."),
-            ("Peluang risiko", "Perkiraan sistem untuk setiap baris; misalnya 60% berarti model menilai risiko lebih tinggi daripada 40%. Ini bukan kepastian kejadian."),
-            ("Titik panas terdeteksi", "Jumlah deteksi panas satelit pada hari dan wilayah tersebut."),
-            ("Curah hujan", "Jumlah hujan yang tercatat; baca bersama faktor lain, bukan sebagai penentu tunggal."),
-            ("Perubahan suhu Pasifik", "Perbedaan suhu laut Pasifik dari kondisi biasanya."),
+        show_visual_guide("ringkasan dan daftar peringatan", [
+            ("Jumlah peringatan", "Jumlah baris data berstatus risiko tinggi atau memiliki probabilitas prediksi minimal 50%."),
+            ("Probabilitas prediksi", "Estimasi model untuk setiap baris; probabilitas 60% bukan kepastian bahwa kebakaran akan terjadi."),
+            ("Hotspot terdeteksi", "Jumlah deteksi panas satelit pada tanggal dan wilayah tersebut."),
+            ("Curah hujan", "Akumulasi hujan tercatat; interpretasikan bersama variabel lain, bukan sebagai faktor tunggal."),
+            ("Anomali ONI", "Penyimpangan suhu permukaan laut Pasifik dari kondisi normal."),
         ])
