@@ -48,6 +48,8 @@ PROVINCE_NAMES = {
     "West Sulawesi": "Sulawesi Barat",
     "West Sumatra": "Sumatera Barat",
 }
+MAP_START_YEAR = 2016
+MAP_END_YEAR = 2026
 
 
 def main():
@@ -119,6 +121,7 @@ def main():
         .sort_values(khg_dimensions, na_position="last")
     )
 
+    map_source = raw[raw["tahun"].between(MAP_START_YEAR, MAP_END_YEAR)]
     sample_dimensions = [
         "provinsi_id",
         "tahun",
@@ -128,7 +131,7 @@ def main():
     sample_parts = [
         group.sample(n=min(2, len(group)), random_state=42 + index)
         for index, (_, group) in enumerate(
-            raw.groupby(sample_dimensions, sort=False, dropna=False)
+            map_source.groupby(sample_dimensions, sort=False, dropna=False)
         )
     ]
     map_sample = pd.concat(sample_parts, ignore_index=True)
@@ -146,7 +149,9 @@ def main():
             "frp",
         ]
     ].sort_values(sample_dimensions)
-    frp_sample = raw.sample(n=min(50000, len(raw)), random_state=42).sort_values(
+    frp_sample = map_source.sample(
+        n=min(50000, len(map_source)), random_state=42
+    ).sort_values(
         ["provinsi_id", "tahun", "bulan"]
     )
     frp_sample = frp_sample[

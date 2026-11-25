@@ -80,7 +80,9 @@ except Exception as e:
 # SIDEBAR FILTER GLOBAL
 # ==============================================================================
 st.sidebar.title("Filter Data")
-tahun_list = sorted(df_prov["tahun"].unique())
+tahun_list = sorted(
+    set(df_prov["tahun"].unique()).union(df_peta["tahun"].unique())
+)
 tahun_range = st.sidebar.select_slider(
     "Rentang tahun",
     options=tahun_list,
@@ -92,6 +94,9 @@ selected_prov = st.sidebar.selectbox("Provinsi", prov_list)
 
 enso_list = ["Semua Fase"] + sorted(df_prov["status_enso"].dropna().unique().tolist())
 selected_enso = st.sidebar.selectbox("Fase ENSO (suhu laut Pasifik)", enso_list)
+st.sidebar.caption(
+    "Data hotspot mencakup 2016–2026; data iklim provinsi tersedia hingga 2025."
+)
 
 # Terapkan Filter ke Dataset Provinsi
 mask_prov = (df_prov["tahun"] >= tahun_range[0]) & (df_prov["tahun"] <= tahun_range[1])
@@ -294,6 +299,11 @@ with tab2:
     st.caption(
         "Seluruh visualisasi tab ini mengikuti filter rentang tahun, provinsi, dan fase ENSO."
     )
+    if selected_enso != "Semua Fase" and tahun_range[1] >= 2026:
+        st.caption(
+            "Data tahun 2026 belum memiliki klasifikasi ENSO; data tahun tersebut hanya "
+            "muncul saat fase ENSO diatur ke Semua Fase."
+        )
     df_g_filt = filter_tab2_data(df_gambut)
     df_g_filt["Tipe Lahan"] = df_g_filt["is_lahan_gambut"].map({1: "Di gambut", 0: "Di luar gambut"})
 
