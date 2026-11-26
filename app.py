@@ -760,7 +760,7 @@ with tab4:
         alert_columns = [
             c for c in [
                 "provinsi_id", "tahun", "kuartal", "bulan", "hari",
-                "curah_hujan", "hotspots_snpp", "oni_anom",
+                "curah_hujan", "suhu_maks", "hotspots_snpp", "oni_anom",
                 "probabilitas_karhutla", "prediksi_status",
             ] if c in df_alert.columns
         ]
@@ -771,6 +771,7 @@ with tab4:
             "bulan": "Bulan",
             "hari": "Hari",
             "curah_hujan": "Curah hujan",
+            "suhu_maks": "Suhu maksimum (°C)",
             "probabilitas_karhutla": "Probabilitas prediksi risiko (%)",
             "hotspots_snpp": "Hotspot terdeteksi",
             "oni_anom": "Anomali ONI (°C)",
@@ -782,12 +783,13 @@ with tab4:
         st.dataframe(alert_table.head(100), use_container_width=True, height=380)
         st.caption(
             "Tabel menampilkan hingga 100 prediksi dengan probabilitas tertinggi. "
-            "Data prediksi yang tersedia tidak memuat suhu rata-rata."
+            "Suhu maksimum diambil dari data iklim harian untuk tanggal dan provinsi yang sama."
         )
         show_visual_guide("ringkasan dan daftar peringatan", [
             ("prediksi_status", "Rawan Tinggi jika probabilitas prediksi minimal 50%; selain itu Normal. Ini adalah estimasi, bukan kepastian kejadian."),
             ("Provinsi berisiko", "Jumlah provinsi unik yang memiliki setidaknya satu prediksi berstatus Rawan Tinggi pada filter aktif."),
             ("Probabilitas prediksi", "Estimasi model untuk setiap baris; probabilitas 60% bukan kepastian bahwa kebakaran akan terjadi."),
+            ("Suhu maksimum", "Suhu maksimum harian (°C) dari data iklim pada tanggal dan provinsi yang sama; penambahan kolom ini tidak mengubah probabilitas prediksi."),
             ("Hotspot terdeteksi", "Jumlah deteksi panas satelit pada tanggal dan wilayah tersebut."),
             ("Curah hujan", "Akumulasi hujan tercatat; interpretasikan bersama variabel lain, bukan sebagai faktor tunggal."),
             ("Anomali ONI", "Penyimpangan suhu permukaan laut Pasifik dari kondisi normal."),
