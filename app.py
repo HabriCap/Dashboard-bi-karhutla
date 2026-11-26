@@ -530,14 +530,21 @@ with tab2:
 # TAB 3: KUALITAS UDARA (ISPU) & DAMPAK KESEHATAN ISPA
 # ==============================================================================
 with tab3:
-    df_ispu_filt = df_ispu.copy()
+    df_ispu_period = df_ispu[
+        df_ispu["tahun"].between(tahun_range[0], tahun_range[1])
+    ].copy()
+    df_ispu_filt = df_ispu_period.copy()
     if selected_prov != "Semua Provinsi":
         df_ispu_filt = df_ispu_filt[df_ispu_filt["provinsi_id"] == selected_prov]
 
+    def format_ispu_mean(column, decimals, suffix=""):
+        value = df_ispu_filt[column].mean()
+        return f"{value:.{decimals}f}{suffix}" if pd.notna(value) else "N/A"
+
     i1, i2, i3 = st.columns(3)
-    i1.metric("Rata-rata konsentrasi PM2.5", f"{df_ispu_filt['pm25_concentration_ugm3'].mean():.1f} µg/m³")
-    i2.metric("Rata-rata indeks kualitas udara", f"{df_ispu_filt['ispu_calculated_index'].mean():.1f}")
-    i3.metric("Estimasi skor beban layanan ISPA", f"{df_ispu_filt['projected_ispa_clinic_burden_score'].mean():.2f} / 10")
+    i1.metric("Rata-rata konsentrasi PM2.5", format_ispu_mean("pm25_concentration_ugm3", 1, " µg/m³"))
+    i2.metric("Rata-rata indeks kualitas udara", format_ispu_mean("ispu_calculated_index", 1))
+    i3.metric("Estimasi skor beban layanan ISPA", format_ispu_mean("projected_ispa_clinic_burden_score", 2, " / 10"))
     show_visual_guide("angka ringkasan udara dan kesehatan", [
         ("Partikulat halus (PM2.5)", "Partikel sangat kecil dari debu atau asap yang dapat masuk jauh ke paru-paru. Nilai lebih tinggi berarti konsentrasi terukur lebih besar."),
         ("Indeks kualitas udara", "Indikator ringkas kondisi pencemaran udara; nilai lebih tinggi berarti kualitas udara lebih buruk."),
@@ -549,40 +556,122 @@ with tab3:
 
     with col_i1:
         st.subheader("Indeks stagnasi atmosfer, asap karhutla, dan konsentrasi PM2.5")
-        df_ispu_filt["Status Kabut Asap"] = df_ispu_filt["wildfire_smoke_plume_flag"].map({True: "Terdeteksi Asap Karhutla", False: "Non-Asap Karhutla"})
-        fig_scat = px.scatter(
-            df_ispu_filt.sample(n=min(3000, len(df_ispu_filt)), random_state=42),
-            x="atmospheric_stagnation_index", y="pm25_concentration_ugm3",
-            color="Status Kabut Asap",
-            color_discrete_map={"Terdeteksi Asap Karhutla": ALERT_RED, "Non-Asap Karhutla": ACCENT_GREEN},
-            labels={"atmospheric_stagnation_index": "Indeks stagnasi atmosfer (0–10)", "pm25_concentration_ugm3": "Konsentrasi PM2.5 (µg/m³)"},
-            opacity=0.65
-        )
-        fig_scat.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig_scat, use_container_width=True)
-        show_visual_guide("stagnasi atmosfer dan konsentrasi PM2.5", [
-            ("Setiap titik", "Satu pengamatan kualitas udara."),
-            ("Sumbu X", "Indeks stagnasi atmosfer; nilai lebih tinggi menunjukkan pergerakan udara lebih terbatas."),
-            ("Sumbu Y", "Konsentrasi partikulat halus PM2.5 yang terukur."),
-            ("Merah / hijau", "Pengamatan dengan / tanpa indikasi plume asap karhutla."),
-            ("Interpretasi", "Bandingkan konsentrasi PM2.5 pada tingkat stagnasi atau kelompok asap yang berbeda. Pola ini tidak membuktikan hubungan sebab-akibat."),
-        ])
+        if not df_ispu_filt.empty:
+            df_ispu_plot = df_ispu_filt.copy()
+            df_ispu_plot["Status Kabut Asap"] = df_ispu_plot[
+                "wildfire_smoke_plume_flag"
+            ].map({True: "Terdeteksi Asap Karhutla", False: "Non-Asap Karhutla"})
+            fig_scat = px.scatter(
+                df_ispu_plot.sample(n=min(3000, len(df_ispu_plot)), random_state=42),
+                x="atmospheric_stagnation_index", y="pm25_concentration_ugm3",
+                color="Status Kabut Asap",
+                color_discrete_map={"Terdeteksi Asap Karhutla": ALERT_RED, "Non-Asap Karhutla": ACCENT_GREEN},
+                labels={"atmospheric_stagnation_index": "Indeks stagnasi atmosfer (0–10)", "pm25_concentration_ugm3": "Konsentrasi PM2.5 (µg/m³)"},
+                opacity=0.65
+            )
+            fig_scat.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_scat, use_container_width=True)
+            show_visual_guide("stagnasi atmosfer dan konsentrasi PM2.5", [
+                ("Setiap titik", "Satu pengamatan kualitas udara."),
+                ("Sumbu X", "Indeks stagnasi atmosfer; nilai lebih tinggi menunjukkan pergerakan udara lebih terbatas."),
+                ("Sumbu Y", "Konsentrasi partikulat halus PM2.5 yang terukur."),
+                ("Merah / hijau", "Pengamatan dengan / tanpa indikasi plume asap karhutla."),
+                ("Interpretasi", "Bandingkan konsentrasi PM2.5 pada tingkat stagnasi atau kelompok asap yang berbeda. Pola ini tidak membuktikan hubungan sebab-akibat."),
+            ])
+        else:
+            st.info("Tidak ada data kualitas udara untuk filter yang dipilih.")
 
     with col_i2:
-        st.subheader("Estimasi skor beban layanan ISPA per provinsi")
-        prov_ispa = df_ispu.groupby("provinsi_id", as_index=False)["projected_ispa_clinic_burden_score"].mean().sort_values("projected_ispa_clinic_burden_score", ascending=True).tail(12)
-        fig_ispa_bar = px.bar(
-            prov_ispa, x="projected_ispa_clinic_burden_score", y="provinsi_id", orientation="h",
-            color_discrete_sequence=[PRIMARY_GREEN],
-            labels={"projected_ispa_clinic_burden_score": "Skor estimasi beban layanan ISPA (0–10)", "provinsi_id": "Provinsi"}
-        )
-        fig_ispa_bar.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
-        st.plotly_chart(fig_ispa_bar, use_container_width=True)
-        show_visual_guide("peringkat skor beban layanan kesehatan", [
-            ("Nama provinsi", "Wilayah yang dibandingkan."),
-            ("Panjang batang", "Skor estimasi beban layanan gangguan pernapasan; batang lebih panjang menunjukkan skor lebih tinggi."),
-            ("Skala 0–10", "Skor ringkasan, bukan jumlah pasien yang datang ke fasilitas kesehatan."),
-        ])
+        st.subheader("Peringkat hari dengan indikasi asap karhutla")
+        if not df_ispu_period.empty:
+            daily_smoke = (
+                df_ispu_period.groupby(["provinsi_id", "tanggal"], as_index=False)
+                .agg(indikasi_asap=("wildfire_smoke_plume_flag", "any"))
+            )
+            prov_smoke = (
+                daily_smoke.groupby("provinsi_id", as_index=False)
+                .agg(
+                    hari_terindikasi_asap=("indikasi_asap", "sum"),
+                    hari_diamati=("tanggal", "size"),
+                )
+            )
+            prov_smoke["persentase_hari_asap"] = (
+                prov_smoke["hari_terindikasi_asap"]
+                .div(prov_smoke["hari_diamati"])
+                .mul(100)
+            )
+            prov_smoke = (
+                prov_smoke.sort_values("persentase_hari_asap", ascending=True)
+                .tail(12)
+            )
+            fig_smoke_rank = px.bar(
+                prov_smoke,
+                x="persentase_hari_asap",
+                y="provinsi_id",
+                orientation="h",
+                color_discrete_sequence=[ALERT_RED],
+                hover_data={
+                    "hari_terindikasi_asap": True,
+                    "hari_diamati": True,
+                    "persentase_hari_asap": ":.1f",
+                },
+                labels={
+                    "persentase_hari_asap": "Hari dengan indikasi asap (%)",
+                    "provinsi_id": "Provinsi",
+                    "hari_terindikasi_asap": "Hari terindikasi asap",
+                    "hari_diamati": "Hari diamati",
+                },
+            )
+            fig_smoke_rank.update_layout(height=400, margin=dict(l=10, r=10, t=30, b=10))
+            fig_smoke_rank.update_xaxes(ticksuffix="%")
+            st.plotly_chart(fig_smoke_rank, use_container_width=True)
+            st.caption(
+                "Peringkat memakai semua provinsi pada rentang tahun terpilih. "
+                "Satu hari dihitung terindikasi jika ada minimal satu catatan asap "
+                "di provinsi tersebut."
+            )
+            show_visual_guide("peringkat indikasi asap karhutla", [
+                ("Panjang batang", "Persentase tanggal yang memiliki setidaknya satu catatan terindikasi asap."),
+                ("Hari terindikasi asap", "Jumlah tanggal unik dengan indikasi asap di provinsi tersebut."),
+                ("Hari diamati", "Jumlah tanggal unik yang memiliki data; jumlah hari ini dapat berbeda antarprovinsi."),
+                ("Batas interpretasi", "Indikasi asap bukan jumlah kebakaran dan tidak membuktikan bahwa asap menyebabkan dampak kesehatan."),
+            ])
+        else:
+            st.info("Tidak ada data kualitas udara pada rentang tahun yang dipilih.")
+
+        st.markdown("**Rata-rata saat terindikasi asap dan non-asap**")
+        if not df_ispu_filt.empty:
+            smoke_comparison = (
+                df_ispu_filt.groupby("wildfire_smoke_plume_flag", as_index=False)
+                .agg(
+                    jumlah_pengamatan=("tanggal", "size"),
+                    rata_rata_pm25=("pm25_concentration_ugm3", "mean"),
+                    rata_rata_skor_ispa=("projected_ispa_clinic_burden_score", "mean"),
+                )
+            )
+            smoke_comparison["Status asap"] = smoke_comparison[
+                "wildfire_smoke_plume_flag"
+            ].map({True: "Terindikasi asap", False: "Non-asap"})
+            smoke_comparison = smoke_comparison[
+                ["Status asap", "jumlah_pengamatan", "rata_rata_pm25", "rata_rata_skor_ispa"]
+            ].rename(columns={
+                "jumlah_pengamatan": "Jumlah pengamatan",
+                "rata_rata_pm25": "Rata-rata PM2.5 (µg/m³)",
+                "rata_rata_skor_ispa": "Rata-rata skor ISPA (0–10)",
+            })
+            smoke_comparison["Rata-rata PM2.5 (µg/m³)"] = smoke_comparison[
+                "Rata-rata PM2.5 (µg/m³)"
+            ].round(1)
+            smoke_comparison["Rata-rata skor ISPA (0–10)"] = smoke_comparison[
+                "Rata-rata skor ISPA (0–10)"
+            ].round(2)
+            st.dataframe(smoke_comparison, use_container_width=True, hide_index=True)
+            st.caption(
+                "Perbandingan mengikuti filter Provinsi di sidebar. "
+                "Skor ISPA adalah estimasi, bukan jumlah pasien."
+            )
+        else:
+            st.info("Tidak ada data untuk membandingkan kelompok asap pada filter yang dipilih.")
 
 # ==============================================================================
 # TAB 4: PERINGATAN DINI & FEATURE IMPORTANCE (RANDOM FOREST)
@@ -613,7 +702,7 @@ with tab4:
         ])
 
     with p2:
-        st.markdown("**Tanggal dan wilayah dengan prediksi risiko tinggi**")
+        st.markdown("**Wilayah yang kemungkinan terdampak karhutla**")
         df_alert = df_pred.copy()
         if "tanggal" in df_alert.columns:
             df_alert["tanggal"] = pd.to_datetime(df_alert["tanggal"], errors="coerce")
@@ -626,42 +715,64 @@ with tab4:
                 df_alert = df_alert[df_alert["provinsi_id"] == selected_prov]
         if "probabilitas_karhutla" in df_alert.columns:
             prob = pd.to_numeric(df_alert["probabilitas_karhutla"], errors="coerce")
-            risk_high = prob >= 0.50
-            if "status_prediksi" in df_alert.columns:
-                risk_high |= df_alert["status_prediksi"].eq("Rawan Tinggi")
-            df_alert = df_alert[risk_high].copy()
+            df_alert["prediksi_status"] = np.where(
+                prob >= 0.50, "Rawan Tinggi", "Normal"
+            )
+            df_alert = df_alert[
+                (prob >= 0.50) & prob.notna()
+            ].copy()
         elif "status_prediksi" in df_alert.columns:
-            df_alert = df_alert[df_alert["status_prediksi"] == "Rawan Tinggi"].copy()
+            df_alert["prediksi_status"] = df_alert["status_prediksi"]
+            df_alert = df_alert[
+                df_alert["prediksi_status"].eq("Rawan Tinggi")
+            ].copy()
 
         alert_prob = (
             pd.to_numeric(df_alert["probabilitas_karhutla"], errors="coerce")
             if "probabilitas_karhutla" in df_alert.columns else pd.Series(dtype=float)
         )
         alert_prob = alert_prob.dropna()
-        alert_kpi1, alert_kpi2 = st.columns(2)
+        alert_kpi1, alert_kpi2, alert_kpi3 = st.columns(3)
         alert_kpi1.metric("Jumlah peringatan risiko tinggi", f"{len(df_alert):,}")
         alert_kpi2.metric(
             "Rata-rata peluang risiko pada daftar",
             f"{alert_prob.mean():.1%}" if not alert_prob.empty else "N/A",
         )
-        sort_cols = [c for c in ["tanggal", "probabilitas_karhutla"] if c in df_alert.columns]
-        if sort_cols:
-            df_alert = df_alert.sort_values(
-                sort_cols,
-                ascending=[False] * len(sort_cols),
-            )
+        affected_regions = (
+            df_alert["provinsi_id"].nunique()
+            if "provinsi_id" in df_alert.columns else 0
+        )
+        alert_kpi3.metric("Provinsi berisiko", f"{affected_regions:,}")
+
+        if "tanggal" in df_alert.columns:
+            month_names = {
+                1: "Januari", 2: "Februari", 3: "Maret", 4: "April",
+                5: "Mei", 6: "Juni", 7: "Juli", 8: "Agustus",
+                9: "September", 10: "Oktober", 11: "November", 12: "Desember",
+            }
+            df_alert["tahun"] = df_alert["tanggal"].dt.year
+            df_alert["kuartal"] = "Q" + df_alert["tanggal"].dt.quarter.astype(str)
+            df_alert["bulan"] = df_alert["tanggal"].dt.month.map(month_names)
+            df_alert["hari"] = df_alert["tanggal"].dt.day
+        df_alert = df_alert.sort_values(
+            "probabilitas_karhutla", ascending=False
+        ) if "probabilitas_karhutla" in df_alert.columns else df_alert
         alert_columns = [
             c for c in [
-                "tanggal", "provinsi_id", "probabilitas_karhutla",
-                "hotspots_snpp", "curah_hujan", "oni_anom",
+                "provinsi_id", "tahun", "kuartal", "bulan", "hari",
+                "curah_hujan", "hotspots_snpp", "oni_anom",
+                "probabilitas_karhutla", "prediksi_status",
             ] if c in df_alert.columns
         ]
         alert_table = df_alert[alert_columns].copy().rename(columns={
-            "tanggal": "Tanggal",
             "provinsi_id": "Provinsi",
+            "tahun": "Tahun",
+            "kuartal": "Kuartal",
+            "bulan": "Bulan",
+            "hari": "Hari",
+            "curah_hujan": "Curah hujan",
             "probabilitas_karhutla": "Probabilitas prediksi risiko (%)",
             "hotspots_snpp": "Hotspot terdeteksi",
-            "curah_hujan": "Curah hujan",
             "oni_anom": "Anomali ONI (°C)",
         })
         if "Probabilitas prediksi risiko (%)" in alert_table.columns:
@@ -669,8 +780,13 @@ with tab4:
                 pd.to_numeric(alert_table["Probabilitas prediksi risiko (%)"], errors="coerce") * 100
             ).round(1)
         st.dataframe(alert_table.head(100), use_container_width=True, height=380)
+        st.caption(
+            "Tabel menampilkan hingga 100 prediksi dengan probabilitas tertinggi. "
+            "Data prediksi yang tersedia tidak memuat suhu rata-rata."
+        )
         show_visual_guide("ringkasan dan daftar peringatan", [
-            ("Jumlah peringatan", "Jumlah baris data berstatus risiko tinggi atau memiliki probabilitas prediksi minimal 50%."),
+            ("prediksi_status", "Rawan Tinggi jika probabilitas prediksi minimal 50%; selain itu Normal. Ini adalah estimasi, bukan kepastian kejadian."),
+            ("Provinsi berisiko", "Jumlah provinsi unik yang memiliki setidaknya satu prediksi berstatus Rawan Tinggi pada filter aktif."),
             ("Probabilitas prediksi", "Estimasi model untuk setiap baris; probabilitas 60% bukan kepastian bahwa kebakaran akan terjadi."),
             ("Hotspot terdeteksi", "Jumlah deteksi panas satelit pada tanggal dan wilayah tersebut."),
             ("Curah hujan", "Akumulasi hujan tercatat; interpretasikan bersama variabel lain, bukan sebagai faktor tunggal."),
